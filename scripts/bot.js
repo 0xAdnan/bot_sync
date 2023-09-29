@@ -1,10 +1,10 @@
-const { ethers } = require('ethers');
+const { Web3 } = require('web3');
 const fs = require('fs');
 const dotenv = require('dotenv');
 
 dotenv.config();
 
-const provider = new ethers.providers.JsonRpcProvider('https://goerli.infura.io/v3/ef76fe8d28bd45859233faf7b7bf1b94');
+const web3 = new Web3('https://goerli.infura.io/v3/ef76fe8d28bd45859233faf7b7bf1b94');
 const botAddress = "0xB78d3f861B7C942ffFE1Ed375A9EF3E237B9095b";
 const abi = [
     {
@@ -66,46 +66,46 @@ const abi = [
     }
 ];
 
-const contract = new ethers.Contract(botAddress, abi, provider);
+const contract = new web3.eth.Contract(abi, botAddress);
 
 const PRIVATE_KEY = process.env.PRIVATE_KEY;
-const wallet = new ethers.Wallet(PRIVATE_KEY, provider);
+// const wallet = web3.eth.accounts.privateKeyToAccount(PRIVATE_KEY);
 
-const myAddress = "0xF3fDdD4F6B243B61c6d783011DA2d0E6c0BAbCe4";
+const myAddress = "0x5e5AEb09aDF5848612ae6fE5c09F43Df0b6e65A4";
 
 
 
 const handleEvent = async (event) => {
-    try {
-        console.log(JSON.stringify(event));
-        const txHash = event.transactionHash;
-        const nonce = await provider.getTransactionCount(myAddress, 'pending');
-        console.log(`This is the nonce right now: ${nonce}`);
-        const gasPrice = await provider.getGasPrice();
-        const txOptions = {
-            nonce: ethers.utils.hexlify(nonce),
-            gasLimit: ethers.utils.hexlify(70000),
-            gasPrice: ethers.utils.hexlify(gasPrice),
-        };
+    const { address, blockHash, blockNumber, transactionHash } = event;
+    const nonce = await web3.eth.getTransactionCount(myAddress);
+    console.log({ address, blockHash, blockNumber, transactionHash, nonce });
 
-        const txPong = await contract.connect(wallet).pong(txHash);
-        const signedTx = await wallet.signTransaction({
-            to: contract.address,
-            data: txPong.data,
-            ...txOptions
-        });
-        const txPongHash = await provider.sendTransaction(signedTx);
-        console.log(`Tx Pong successful! ${txPongHash.hash}`);
+    const gasPrice = await web3.eth.getGasPrice();
+    const increasedGasPrice = web3.utils.toHex(Math.round(Number(gasPrice) * 1.1)); // Increase gas price by 10% // Increase gas price by 10%
+
+    const txPong = contract.methods.pong(transactionHash).encodeABI();
+
+    const txOptions = {
+        nonce: nonce,
+        gas: 70000,
+        gasPrice: increasedGasPrice,
+        to: contract.options.address,
+        data: txPong
+    };
+
+    try {
+        const signedTx = await web3.eth.accounts.signTransaction(txOptions, PRIVATE_KEY);
+        const txPongHash = await web3.eth.sendSignedTransaction(signedTx.rawTransaction);
+        console.log(`Pong successfully called at:! ${txPongHash.transactionHash}`);
     } catch (error) {
-        console.error(`Error handling event: ${error}`);
+        console.error(`Error during pong function call: ${error}`);
     }
 };
-
 
 const logLoop = async (eventFilter, pollInterval) => {
     while (true) {
         console.log("Checking for new entries...");
-        const newEntries = await provider.getLogs(eventFilter);
+        const newEntries = await web3.eth.getPastLogs(eventFilter);
         for (const ping of newEntries) {
             await handleEvent(ping);
         }
@@ -114,7 +114,10 @@ const logLoop = async (eventFilter, pollInterval) => {
 };
 
 const main = async () => {
-    const eventFilter = contract.filters.Ping();
+    const eventFilter = {
+        address: contract.options.address,
+        topics: [web3.utils.sha3('Ping()')]
+    };
     try {
         await logLoop(eventFilter, 1);
     } catch (error) {
