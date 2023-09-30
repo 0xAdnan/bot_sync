@@ -5,7 +5,7 @@ const dotenv = require('dotenv');
 dotenv.config();
 
 const web3 = new Web3('https://goerli.infura.io/v3/ef76fe8d28bd45859233faf7b7bf1b94');
-const botAddress = "0xB78d3f861B7C942ffFE1Ed375A9EF3E237B9095b";
+const botAddress = "0xE7af13bcc36280C16B8044CdaB85534a108DF9cc";
 const abi = [
     {
         "inputs": [],
@@ -66,23 +66,21 @@ const abi = [
     }
 ];
 
+
 const contract = new web3.eth.Contract(abi, botAddress);
-
 const PRIVATE_KEY = process.env.PRIVATE_KEY;
-
 const myAddress = "0x5e5AEb09aDF5848612ae6fE5c09F43Df0b6e65A4";
 
-
-
+// Function to handle the event
 const handleEvent = async (event) => {
     console.log("Ping event detected!");
-    const { address, blockHash, blockNumber, transactionHash } = event;
     const nonce = await web3.eth.getTransactionCount(myAddress);
+    const { address, blockHash, blockNumber, transactionHash} = event;
     console.log({ address, blockHash, blockNumber, transactionHash, nonce });
 
+    /**Get the current gas price and increase it by 10% so that we dont run into the error "replacement fee too low".*/
     const gasPrice = await web3.eth.getGasPrice();
-    const increasedGasPrice = web3.utils.toHex(Math.round(Number(gasPrice) * 1.1)); // Increase gas price by 10% // Increase gas price by 10%
-
+    const increasedGasPrice = web3.utils.toHex(Math.round(Number(gasPrice) * 1.1));
     const txPong = contract.methods.pong(transactionHash).encodeABI();
 
     const txOptions = {
@@ -93,6 +91,7 @@ const handleEvent = async (event) => {
         data: txPong
     };
 
+    // Sign and send the pong transaction
     try {
         const signedTx = await web3.eth.accounts.signTransaction(txOptions, PRIVATE_KEY);
         const txPongHash = await web3.eth.sendSignedTransaction(signedTx.rawTransaction);
@@ -100,24 +99,33 @@ const handleEvent = async (event) => {
     } catch (error) {
         console.error(`Error during pong function call: ${error}`);
     }
+    console.log("Searching for new ping events...");
 };
 
+// function to continuously check for new events
 const logLoop = async (eventFilter, pollInterval) => {
+    console.log("Searching for new ping events...");
+
+    // running an infinte loop for event check
     while (true) {
-        console.log("Checking for new entries...");
+
         const newEntries = await web3.eth.getPastLogs(eventFilter);
         for (const ping of newEntries) {
             await handleEvent(ping);
         }
+
+        // wait for the specified poll interval before checking again
         await new Promise(resolve => setTimeout(resolve, pollInterval * 1000));
     }
 };
+
 
 const main = async () => {
     const eventFilter = {
         address: contract.options.address,
         topics: [web3.utils.sha3('Ping()')]
     };
+
     try {
         await logLoop(eventFilter, 1);
     } catch (error) {
