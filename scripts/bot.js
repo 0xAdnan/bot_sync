@@ -69,13 +69,13 @@ const abi = [
 const contract = new web3.eth.Contract(abi, botAddress);
 
 const PRIVATE_KEY = process.env.PRIVATE_KEY;
-// const wallet = web3.eth.accounts.privateKeyToAccount(PRIVATE_KEY);
 
 const myAddress = "0x5e5AEb09aDF5848612ae6fE5c09F43Df0b6e65A4";
 
 
 
 const handleEvent = async (event) => {
+    console.log("Ping event detected!");
     const { address, blockHash, blockNumber, transactionHash } = event;
     const nonce = await web3.eth.getTransactionCount(myAddress);
     console.log({ address, blockHash, blockNumber, transactionHash, nonce });
@@ -96,7 +96,7 @@ const handleEvent = async (event) => {
     try {
         const signedTx = await web3.eth.accounts.signTransaction(txOptions, PRIVATE_KEY);
         const txPongHash = await web3.eth.sendSignedTransaction(signedTx.rawTransaction);
-        console.log(`Pong successfully called at:! ${txPongHash.transactionHash}`);
+        console.log(`Pong function successfully called at: ${txPongHash.transactionHash}`);
     } catch (error) {
         console.error(`Error during pong function call: ${error}`);
     }
